@@ -4,18 +4,20 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Ajedrez Online</title>
+    <!-- Estilos CSS -->
     <link rel="stylesheet" href="https://unpkg.com/@chrisoakman/chessboardjs@1.0.0/dist/chessboard-1.0.0.min.css">
     <style>
         body { font-family: sans-serif; background-color: #333; color: white; display: flex; flex-direction: column; align-items: center; justify-content: center; height: 100vh; margin: 0; }
         #board { width: 100%; max-width: 400px; margin: 20px 0; }
-        #status { background: #555; padding: 10px; border-radius: 5px; }
+        #status { background: #555; padding: 10px; border-radius: 5px; margin-bottom: 10px;}
     </style>
 </head>
 <body>
     <h1>Ajedrez Online</h1>
-    <div id="board"></div>
     <div id="status">Conectando...</div>
+    <div id="board"></div>
 
+    <!-- Scripts necesarios -->
     <script src="https://code.jquery.com/jquery-3.5.1.min.js"></script>
     <script src="https://unpkg.com/@chrisoakman/chessboardjs@1.0.0/dist/chessboard-1.0.0.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/chess.js/0.10.3/chess.min.js"></script>
@@ -48,11 +50,14 @@
 
         function onSnapEnd() { board.position(game.fen()); }
 
-        // AQUÍ ESTÁ EL CAMBIO PARA QUE SE VEAN LAS PIEZAS
+        // --- AQUÍ ESTABA EL ERROR, ESTA ES LA URL CORREGIDA ---
+        // Usamos unpkg.com que es rápido y seguro
+        const pieceUrl = 'https://unpkg.com/@chrisoakman/chessboardjs@1.0.0/dist/img/chesspieces/wikipedia/{piece}.png';
+
         board = Chessboard('board', {
             draggable: true,
             position: 'start',
-            pieceTheme: 'https://chessboardjs.com/img/chesspieces/wikipedia/{piece}.png',
+            pieceTheme: pieceUrl, // Usamos la nueva URL
             onDragStart: onDragStart,
             onDrop: onDrop,
             onSnapEnd: onSnapEnd
@@ -61,19 +66,24 @@
         function updateStatus() {
             let status = '';
             let moveColor = (game.turn() === 'w') ? 'Blancas' : 'Negras';
-            if (game.in_checkmate()) status = 'Game over, ' + moveColor + ' pierden.';
+            if (game.in_checkmate()) status = 'Jaque Mate. Ganan ' + (moveColor === 'Blancas' ? 'Negras' : 'Blancas');
             else if (game.in_draw()) status = 'Tablas.';
             else status = 'Turno de: ' + moveColor;
             $status.text(status);
         }
 
-        socket.on('waiting', (msg) => { $status.text(msg); });
+        socket.on('waiting', (msg) => { 
+            $status.text(msg); 
+            board.position('start');
+        });
+        
         socket.on('init', (data) => {
             playerColor = data.color;
             currentRoom = data.room;
             board.orientation(playerColor);
-            $status.text('¡Empieza el juego! Eres ' + (playerColor==='white'?'Blancas':'Negras'));
+            $status.text('¡Juego iniciado! Eres ' + (playerColor==='white'?'Blancas':'Negras'));
         });
+        
         socket.on('move', (move) => {
             game.move(move);
             board.position(game.fen());
