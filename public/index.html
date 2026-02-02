@@ -1,0 +1,83 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Ajedrez Online</title>
+    <link rel="stylesheet" href="https://unpkg.com/@chrisoakman/chessboardjs@1.0.0/dist/chessboard-1.0.0.min.css">
+    <style>
+        body { font-family: sans-serif; background-color: #333; color: white; display: flex; flex-direction: column; align-items: center; justify-content: center; height: 100vh; margin: 0; }
+        #board { width: 100%; max-width: 400px; margin: 20px 0; }
+        #status { background: #555; padding: 10px; border-radius: 5px; }
+    </style>
+</head>
+<body>
+    <h1>Ajedrez Online</h1>
+    <div id="board"></div>
+    <div id="status">Conectando...</div>
+
+    <script src="https://code.jquery.com/jquery-3.5.1.min.js"></script>
+    <script src="https://unpkg.com/@chrisoakman/chessboardjs@1.0.0/dist/chessboard-1.0.0.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/chess.js/0.10.3/chess.min.js"></script>
+    <script src="/socket.io/socket.io.js"></script>
+
+    <script>
+        // Al no poner URL, se conecta automáticamente al dominio donde esté alojada la web
+        const socket = io(); 
+        const $status = $('#status');
+        let board = null;
+        let game = new Chess();
+        let playerColor = null;
+        let currentRoom = null;
+
+        function onDragStart(source, piece) {
+            if (game.game_over()) return false;
+            if ((game.turn() === 'w' && playerColor !== 'white') ||
+                (game.turn() === 'b' && playerColor !== 'black') ||
+                (game.turn() === 'w' && piece.search(/^b/) !== -1) ||
+                (game.turn() === 'b' && piece.search(/^w/) !== -1)) {
+                return false;
+            }
+        }
+
+        function onDrop(source, target) {
+            const move = game.move({ from: source, to: target, promotion: 'q' });
+            if (move === null) return 'snapback';
+            socket.emit('move', { room: currentRoom, move: move });
+            updateStatus();
+        }
+
+        function onSnapEnd() { board.position(game.fen()); }
+
+        board = Chessboard('board', {
+            draggable: true,
+            position: 'start',
+            onDragStart: onDragStart,
+            onDrop: onDrop,
+            onSnapEnd: onSnapEnd
+        });
+
+        function updateStatus() {
+            let status = '';
+            let moveColor = (game.turn() === 'w') ? 'Blancas' : 'Negras';
+            if (game.in_checkmate()) status = 'Game over, ' + moveColor + ' pierden.';
+            else if (game.in_draw()) status = 'Tablas.';
+            else status = 'Turno de: ' + moveColor;
+            $status.text(status);
+        }
+
+        socket.on('waiting', (msg) => { $status.text(msg); });
+        socket.on('init', (data) => {
+            playerColor = data.color;
+            currentRoom = data.room;
+            board.orientation(playerColor);
+            $status.text('¡Empieza el juego! Eres ' + (playerColor==='white'?'Blancas':'Negras'));
+        });
+        socket.on('move', (move) => {
+            game.move(move);
+            board.position(game.fen());
+            updateStatus();
+        });
+    </script>
+</body>
+</html>
