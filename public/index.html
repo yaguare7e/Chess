@@ -50,14 +50,14 @@
 
         function onSnapEnd() { board.position(game.fen()); }
 
-        // --- AQUÍ ESTABA EL ERROR, ESTA ES LA URL CORREGIDA ---
-        // Usamos unpkg.com que es rápido y seguro
-        const pieceUrl = 'https://unpkg.com/@chrisoakman/chessboardjs@1.0.0/dist/img/chesspieces/wikipedia/{piece}.png';
+        // --- SOLUCIÓN DEL ERROR DE IMÁGENES ---
+        // Usamos jsDelivr conectado al repositorio oficial. Esto garantiza que las imágenes existan.
+        const pieceUrl = 'https://cdn.jsdelivr.net/gh/oakmac/chessboardjs@master/website/img/chesspieces/wikipedia/{piece}.png';
 
         board = Chessboard('board', {
             draggable: true,
             position: 'start',
-            pieceTheme: pieceUrl, // Usamos la nueva URL
+            pieceTheme: pieceUrl, // Aquí aplicamos la URL segura
             onDragStart: onDragStart,
             onDrop: onDrop,
             onSnapEnd: onSnapEnd
