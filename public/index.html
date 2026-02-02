@@ -4,60 +4,111 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Ajedrez Online</title>
-    <!-- Estilos CSS -->
+    <!-- Usamos un CSS limpio y directo -->
     <link rel="stylesheet" href="https://unpkg.com/@chrisoakman/chessboardjs@1.0.0/dist/chessboard-1.0.0.min.css">
     <style>
-        body { font-family: sans-serif; background-color: #333; color: white; display: flex; flex-direction: column; align-items: center; justify-content: center; height: 100vh; margin: 0; }
-        #board { width: 100%; max-width: 400px; margin: 20px 0; }
-        #status { background: #555; padding: 10px; border-radius: 5px; margin-bottom: 10px;}
+        body { 
+            font-family: 'Segoe UI', sans-serif; 
+            background-color: #222; 
+            color: #fff; 
+            display: flex; 
+            flex-direction: column; 
+            align-items: center; 
+            margin: 0; 
+            padding-top: 20px;
+        }
+        h1 { margin: 0 0 10px 0; }
+        #board { width: 100%; max-width: 400px; margin: 10px 0; }
+        
+        .info-box {
+            background: #444;
+            padding: 15px;
+            border-radius: 8px;
+            text-align: center;
+            width: 90%;
+            max-width: 380px;
+            margin-bottom: 10px;
+            border: 2px solid #555;
+        }
+        
+        #player-display { font-size: 1.2em; color: #4CAF50; font-weight: bold; margin-bottom: 5px; }
+        #status-display { font-size: 1em; color: #ddd; }
+        
+        .highlight-white { box-shadow: inset 0 0 3px 3px yellow; }
+        .highlight-black { box-shadow: inset 0 0 3px 3px blue; }
     </style>
 </head>
 <body>
+
     <h1>Ajedrez Online</h1>
-    <div id="status">Conectando...</div>
+
+    <div class="info-box">
+        <div id="player-display">Conectando...</div>
+        <div id="status-display">Esperando al servidor...</div>
+    </div>
+
     <div id="board"></div>
 
-    <!-- Scripts necesarios -->
     <script src="https://code.jquery.com/jquery-3.5.1.min.js"></script>
     <script src="https://unpkg.com/@chrisoakman/chessboardjs@1.0.0/dist/chessboard-1.0.0.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/chess.js/0.10.3/chess.min.js"></script>
     <script src="/socket.io/socket.io.js"></script>
 
     <script>
-        const socket = io(); 
-        const $status = $('#status');
+        const socket = io();
         let board = null;
         let game = new Chess();
-        let playerColor = null;
+        let playerColor = null; // 'white' o 'black'
         let currentRoom = null;
+        
+        const $playerDisplay = $('#player-display');
+        const $statusDisplay = $('#status-display');
+
+        // --- Configuración visual de piezas (Fuente segura) ---
+        // Usamos una URL diferente para asegurar que no se mezcle con la caché anterior
+        const pieceUrl = 'https://chessboardjs.com/img/chesspieces/wikipedia/{piece}.png';
 
         function onDragStart(source, piece) {
+            // 1. Si el juego acabó, no mover
             if (game.game_over()) return false;
-            if ((game.turn() === 'w' && playerColor !== 'white') ||
-                (game.turn() === 'b' && playerColor !== 'black') ||
-                (game.turn() === 'w' && piece.search(/^b/) !== -1) ||
-                (game.turn() === 'b' && piece.search(/^w/) !== -1)) {
-                return false;
-            }
+
+            // 2. Si aún no tienes color asignado, no mover
+            if (!playerColor) return false;
+
+            // 3. Regla de oro: Solo puedes mover TUS piezas
+            // Si eres blancas (white) y la pieza empieza con 'b' (black) -> Bloquear
+            if (playerColor === 'white' && piece.search(/^b/) !== -1) return false;
+            if (playerColor === 'black' && piece.search(/^w/) !== -1) return false;
+
+            // 4. Regla de turno: Solo mover si es tu turno
+            if (game.turn() === 'w' && playerColor !== 'white') return false;
+            if (game.turn() === 'b' && playerColor !== 'black') return false;
         }
 
         function onDrop(source, target) {
-            const move = game.move({ from: source, to: target, promotion: 'q' });
+            // Intentar mover
+            const move = game.move({
+                from: source,
+                to: target,
+                promotion: 'q'
+            });
+
+            // Si es ilegal, devolver pieza
             if (move === null) return 'snapback';
+
+            // Enviar jugada
             socket.emit('move', { room: currentRoom, move: move });
             updateStatus();
         }
 
-        function onSnapEnd() { board.position(game.fen()); }
-
-        // --- SOLUCIÓN DEL ERROR DE IMÁGENES ---
-        // Usamos jsDelivr conectado al repositorio oficial. Esto garantiza que las imágenes existan.
-        const pieceUrl = 'https://cdn.jsdelivr.net/gh/oakmac/chessboardjs@master/website/img/chesspieces/wikipedia/{piece}.png';
+        function onSnapEnd() {
+            board.position(game.fen());
+        }
 
         board = Chessboard('board', {
             draggable: true,
             position: 'start',
-            pieceTheme: pieceUrl, // Aquí aplicamos la URL segura
+            pieceTheme: 'https://cdn.jsdelivr.net/gh/oakmac/chessboardjs@master/website/img/chesspieces/wikipedia/{piece}.png',
             onDragStart: onDragStart,
             onDrop: onDrop,
             onSnapEnd: onSnapEnd
@@ -66,24 +117,49 @@
         function updateStatus() {
             let status = '';
             let moveColor = (game.turn() === 'w') ? 'Blancas' : 'Negras';
-            if (game.in_checkmate()) status = 'Jaque Mate. Ganan ' + (moveColor === 'Blancas' ? 'Negras' : 'Blancas');
-            else if (game.in_draw()) status = 'Tablas.';
-            else status = 'Turno de: ' + moveColor;
-            $status.text(status);
+
+            // Estado del juego
+            if (game.in_checkmate()) {
+                status = 'Jaque Mate. Gana: ' + (moveColor === 'Blancas' ? 'Negras' : 'Blancas');
+            } else if (game.in_draw()) {
+                status = 'Empate (Tablas)';
+            } else {
+                status = 'Turno de: ' + moveColor;
+                if (game.in_check()) status += ' (¡Jaque!)';
+            }
+
+            // Indicador personal
+            let myTurn = (game.turn() === 'w' && playerColor === 'white') || 
+                         (game.turn() === 'b' && playerColor === 'black');
+            
+            let statusText = status + (myTurn ? ' <br>(¡TE TOCA MOVER!)' : ' <br>(Espera a tu oponente)');
+            $statusDisplay.html(statusText);
         }
 
-        socket.on('waiting', (msg) => { 
-            $status.text(msg); 
+        // --- Conexión con el Servidor ---
+
+        socket.on('waiting', (msg) => {
+            $playerDisplay.text('⏳ Buscando oponente...');
+            $statusDisplay.text('Envía el link a un amigo para jugar.');
+            $playerDisplay.css('color', 'orange');
             board.position('start');
         });
-        
+
         socket.on('init', (data) => {
             playerColor = data.color;
             currentRoom = data.room;
+            
+            // Girar tablero si eres negras
             board.orientation(playerColor);
-            $status.text('¡Juego iniciado! Eres ' + (playerColor==='white'?'Blancas':'Negras'));
+            
+            // Mensaje claro de quién eres
+            let colorName = (playerColor === 'white') ? 'BLANCAS' : 'NEGRAS';
+            $playerDisplay.text('JUEGAS CON: ' + colorName);
+            $playerDisplay.css('color', (playerColor === 'white') ? '#eee' : '#aaa'); // Estilo visual
+            
+            updateStatus();
         });
-        
+
         socket.on('move', (move) => {
             game.move(move);
             board.position(game.fen());
